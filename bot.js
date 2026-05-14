@@ -36,7 +36,7 @@ discord.once('clientReady', () => {
   discordChannel = discord.channels.cache.get(process.env.DISCORD_CHANNEL_ID)
   if (!discordChannel) { log('⚠️ Channel Discord introuvable'); return }
   log(`Channel: #${discordChannel.name}`)
-  discordChannel.send('🟢 **Tumsenoubot en ligne !** Survie auto + craft/cuisson autonomes activés 🛡️🔨🔥')
+  discordChannel.send('🟢 **Tumsenoubot en ligne !**')
 })
 
 function sendDiscord(msg) {
@@ -78,7 +78,7 @@ function createBot() {
     log('Spawné !')
     initPathfinder(bot)
     startSurvival(bot, log, sendDiscord)
-    sendDiscord('✅ **Connecté** sur darkail.mine.fun | 🛡️ Survie ON | 🔨 Craft autonome ON')
+    sendDiscord('✅ **Connecté** sur darkail.mine.fun')
   })
 
   bot.on('login', () => log(`Connecté: ${bot.username}`))
@@ -103,6 +103,65 @@ function scheduleReconnect() {
   reconnectTimer = setTimeout(() => { reconnectTimer = null; createBot() }, 30000)
 }
 
+// ── Exécution d'une action ────────────────────────────────────────
+async function runAction(action) {
+  if (!bot?.entity) { sendDiscord('❌ Pas encore connecté en jeu.'); return }
+
+  try {
+    // Tâches autonomes complexes
+    if (action.action === 'make_pick') {
+      sendDiscord(`🔨 Je fabrique une pioche en ${action.material || 'bois'}...`)
+      const result = await taskMakePick(bot, action.material || 'bois', log, sendDiscord)
+      sendDiscord(result)
+      return
+    }
+
+    if (action.action === 'make_sword') {
+      sendDiscord(`⚔️ Je fabrique une épée en ${action.material || 'bois'}...`)
+      const result = await taskMakeSword(bot, action.material || 'bois', log, sendDiscord)
+      sendDiscord(result)
+      return
+    }
+
+    if (action.action === 'make_axe') {
+      sendDiscord(`🪓 Je fabrique une hache en ${action.material || 'bois'}...`)
+      const result = await taskMakePick(bot, action.material || 'bois', log, sendDiscord)
+      sendDiscord(result)
+      return
+    }
+
+    if (action.action === 'smelt') {
+      sendDiscord(`🔥 Cuisson de ${action.what}...`)
+      const result = await taskSmelt(bot, action.what, action.count || 1, log, sendDiscord)
+      sendDiscord(result)
+      return
+    }
+
+    if (action.action === 'make_gear') {
+      // Fait un stuff complet de base automatiquement
+      sendDiscord('⚒️ Je me fais un stuff de base complet ! Ça va prendre un moment...')
+      sendDiscord('🪓 Étape 1/4: Pioche en bois...')
+      await taskMakePick(bot, 'bois', log, sendDiscord)
+      sendDiscord('⛏️ Étape 2/4: Pioche en pierre...')
+      await taskMakePick(bot, 'pierre', log, sendDiscord)
+      sendDiscord('⚔️ Étape 3/4: Épée en pierre...')
+      await taskMakeSword(bot, 'pierre', log, sendDiscord)
+      sendDiscord('🔥 Étape 4/4: Four pour cuire...')
+      await taskSmelt(bot, 'fer', 3, log, sendDiscord)
+      sendDiscord('✅ Stuff de base terminé !')
+      return
+    }
+
+    // Actions standard
+    const response = await executeAction(bot, action, log, sendDiscord)
+    sendDiscord(response)
+
+  } catch (err) {
+    log(`Erreur action: ${err.message}`)
+    sendDiscord(`❌ Erreur: ${err.message}`)
+  }
+}
+
 // ── Gestion Discord ───────────────────────────────────────────────
 discord.on('messageCreate', async (message) => {
   if (message.author.bot) return
@@ -115,48 +174,23 @@ discord.on('messageCreate', async (message) => {
   if (content.toLowerCase() === '!reset') { clearHistory(); sendDiscord('🔄 Historique réinitialisé.'); return }
   if (content.toLowerCase() === '!survie on') { startSurvival(bot, log, sendDiscord); sendDiscord('🛡️ Survie ON.'); return }
   if (content.toLowerCase() === '!survie off') { stopSurvival(); sendDiscord('⚠️ Survie OFF.'); return }
+  if (content.toLowerCase() === '!status') {
+    const s = getBotState()
+    sendDiscord(`📍 X:${s.x} Y:${s.y} Z:${s.z} | ❤️${s.health}/20 | 🍖${s.food}/20\n🎒 ${s.inventory}`)
+    return
+  }
 
   message.channel.sendTyping()
+
   const state = getBotState()
   const result = await askClaude(content, state)
 
   if (result.type === 'action') {
-    const action = result.data
-    log(`Action: ${JSON.stringify(action)}`)
-    if (!bot?.entity) { sendDiscord('❌ Pas encore connecté.'); return }
-
-    try {
-      // ── Tâches autonomes complexes ──────────────────────────────
-      if (action.action === 'make_pick') {
-        sendDiscord(`🔨 Je fabrique une pioche en ${action.material || 'bois'} de façon autonome...`)
-        const result = await taskMakePick(bot, action.material || 'bois', log, sendDiscord)
-        sendDiscord(result)
-        return
-      }
-
-      if (action.action === 'make_sword') {
-        sendDiscord(`⚔️ Je fabrique une épée en ${action.material || 'bois'} de façon autonome...`)
-        const result = await taskMakeSword(bot, action.material || 'bois', log, sendDiscord)
-        sendDiscord(result)
-        return
-      }
-
-      if (action.action === 'smelt') {
-        sendDiscord(`🔥 Je commence la cuisson de ${action.what}...`)
-        const result = await taskSmelt(bot, action.what, action.count || 1, log, sendDiscord)
-        sendDiscord(result)
-        return
-      }
-
-      // Action standard
-      const response = await executeAction(bot, action, log, sendDiscord)
-      sendDiscord(response)
-
-    } catch (err) {
-      log(`Erreur action: ${err.message}`)
-      sendDiscord(`❌ Erreur: ${err.message}`)
-    }
+    // ── Exécute l'action SANS afficher le JSON ──────────────────
+    log(`Action: ${JSON.stringify(result.data)}`)
+    await runAction(result.data)
   } else {
+    // Réponse texte normale
     sendDiscord(result.data)
   }
 })
