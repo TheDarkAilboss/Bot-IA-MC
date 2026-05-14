@@ -1,0 +1,16 @@
+{
+  "name": "tumsenoubot",
+  "version": "2.0.0",
+  "description": "Bot Minecraft intelligent contrôlé via Discord et Claude AI",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "mineflayer": "^4.23.0",
+    "mineflayer-pathfinder": "^2.4.5",
+    "discord.js": "^14.15.3",
+    "@anthropic-ai/sdk": "^0.39.0",
+    "dotenv": "^16.4.5"
+  }
+}
